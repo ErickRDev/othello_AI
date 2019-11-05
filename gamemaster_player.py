@@ -1,44 +1,17 @@
-import time
-
-from models.move import Move
-from copy import deepcopy
-
-""" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ """
-"""                       AUXILIARY STRUCTURES                           """
-""" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ """
-
-EMPTY_CELL = "."
-
-CORNERS = [
-    (1, 1),   # north-western corner
-    (1, 8),   # north-eastern corner
-    (8, 8),   # south-eastern corner
-    (8, 1)    # south-western corner
-]
-
-DIRECTIONS = [
-    (-1, -1), # north-west
-    (-1, 0),  # north
-    (-1, 1),  # north-east
-    (0, 1),   # east
-    (1, 1),   # south-east
-    (1, 0),   # south
-    (1, -1),  # south-west
-    (0, -1)   # west
-]
-
-total_branches = 0
-visited_nodes = 0
-
-""" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ """
-"""                           PLAYING LOGIC                              """
-""" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ """
-
 class GameMaster:
     """ 
         Simulates an inteligent player
     """
+
+    import time
+    import copy
+
+    from models.move import Move
+
     def __init__(self, color, allowed_round_time=3000):
+        """
+            Constructor.
+        """
         self.color = color
         self.opponent_color = "o" if self.color == "@" else "@"
 
@@ -47,6 +20,30 @@ class GameMaster:
         self.turn = 1 if self.color == "@" else 2
         self.first_turn = True
 
+        self.CORNERS = [
+            (1, 1),   # north-western corner
+            (1, 8),   # north-eastern corner
+            (8, 8),   # south-eastern corner
+            (8, 1)    # south-western corner
+        ]
+
+        self.CORNER_NEIGHBOURS = [
+            (2, 1), (2, 2), (1, 2),
+            (1, 7), (2, 7), (2, 8),
+            (7, 1), (7, 2), (8, 2),
+            (8, 7), (7, 7), (7, 8)
+        ]
+
+        self.DIRECTIONS = [
+            (-1, -1), # north-west
+            (-1, 0),  # north
+            (-1, 1),  # north-east
+            (0, 1),   # east
+            (1, 1),   # south-east
+            (1, 0),   # south
+            (1, -1),  # south-west
+            (0, -1)   # west
+        ]
 
     def evaluate_board_configuration(self, board):
         """
@@ -70,12 +67,12 @@ class GameMaster:
         """
         # counters for coin parity heuristic
         max_coins, min_coins = 0, 0
+
         # counters for potential mobility heuristic
-        max_potential_moves, min_potential_moves = set(), set()
-        # counters for corners heuristic
-        max_corners_captured, min_corners_captured = 0, 0
-        max_potential_corners, min_potential_corners = 0, 0
-        max_unlikely_corners, min_unlikely_corners = 0, 0
+        max_potential_moves = 0
+        min_potential_moves = 0
+        max_potential_moves_considered = set()
+        min_potential_moves_considered = set()
 
         # iterating over the board and evaluating current configuration of coins:
         for i in range(1, 9):
@@ -86,55 +83,103 @@ class GameMaster:
                     max_coins += 1
 
                     # potential mobility
-                    for direction in DIRECTIONS:
-                        # TODO: calculate stability score
+                    for direction in self.DIRECTIONS:
                         _i, _j = i + direction[0], j + direction[1]
-                        if board[_i][_j] == "." and (_i, _j) not in max_potential_moves:
-                            max_potential_moves.add((_i, _j))
+                        if board[_i][_j] == "." and (_i, _j) not in max_potential_moves_considered:
+                            max_potential_moves_considered.add((_i, _j))
+                            max_potential_moves += 1
 
                 elif coin == self.opponent_color:
                     # coin parity
                     min_coins += 1
 
                     # potential mobility
-                    for direction in DIRECTIONS:
+                    for direction in self.DIRECTIONS:
                         _i, _j = i + direction[0], j + direction[1]
-                        if board[_i][_j] == "." and (_i, _j) not in max_potential_moves:
-                            max_potential_moves.add((_i, _j))
-
-        max_potential_moves_cnt = len(max_potential_moves)
-        min_potential_moves_cnt = len(min_potential_moves)
+                        if board[_i][_j] == "." and (_i, _j) not in min_potential_moves_considered:
+                            min_potential_moves_considered.add((_i, _j))
+                            min_potential_moves += 1
 
         # calculating coin parity score
-        coin_parity_score = 100 * (max_coins - min_coins) / (max_coins + min_coins)
+        coin_parity_score = (100 * 
+                            (float(max_coins - min_coins) / 
+                            float(max_coins + min_coins)))
 
         mobility_score = 0
         # calculating potential mobility score
-        if max_potential_moves_cnt + min_potential_moves_cnt != 0:
+        if max_potential_moves + min_potential_moves != 0:
             mobility_score = (100 * 
-                                       ((max_potential_moves_cnt - min_potential_moves_cnt) / 
-                                       (max_potential_moves_cnt + min_potential_moves_cnt)))
+                             (float(max_potential_moves - min_potential_moves) / 
+                             float(max_potential_moves + min_potential_moves)))
 
-        # evaluating corners
-        for corner_coords in CORNERS:
-            corner = board[corner_coords[0]][corner_coords[1]]
-            if corner == self.color:
+        # counters for corners heuristic
+        max_corners_captured = 0
+        min_corners_captured = 0
+        max_potential_corners = 0
+        min_potential_corners = 0
+        max_potential_corners_considered = set()
+        min_potential_corners_considered = set()
+
+        # evaluating corners:
+        for corner_coords in self.CORNERS:
+            corner_color = board[corner_coords[0]][corner_coords[1]]
+
+            if corner_color == self.color:
+                # corner captured by max player
                 max_corners_captured += 1
+                continue
 
-            if corner == self.opponent_color:
+            if corner_color == self.opponent_color:
+                # corner captured by min player
                 min_corners_captured += 1
+                continue
 
-            # TODO: evaluate potential corner captures
+            # corner uncaptured
+            # evaluating potential corners:
+            for direction in self.DIRECTIONS:
+                _i, _j = corner_coords[0], corner_coords[1]
+                di, dj = direction[0], direction[1]
+
+                _i += di
+                _j += dj
+
+                current_pos = board[_i][_j]
+
+                if current_pos == "?" or current_pos == ".":
+                    continue
+
+                if current_pos == self.opponent_color:
+                    if corner_coords not in max_potential_corners_considered:
+                        max_potential_corners_considered.add(corner_coords)
+                        max_potential_corners += 1
+
+                if current_pos == self.color:
+                    if corner_coords not in min_potential_corners_considered:
+                        min_potential_corners_considered.add(corner_coords)
+                        min_potential_corners += 1
+
             # TODO: evaluate unlikely corner captures
 
-        corners_score = 0
-        # calculating corner scores
+        captured_corners_score = 0
+        # calculating captured corner scores
         if max_corners_captured + min_corners_captured != 0:
-            corners_score = (100 * 
-                            ((max_corners_captured - min_corners_captured)) / 
-                            ((max_corners_captured + min_corners_captured)))
+            captured_corners_score = (100 * 
+                                     (float(max_corners_captured - min_corners_captured) / 
+                                     float(max_corners_captured + min_corners_captured)))
 
-        return coin_parity_score + mobility_score + corners_score
+        potential_corners_score = 0
+        # calculating potential corner scores
+        if max_potential_corners + min_potential_corners != 0:
+            potential_corners_score = (100 *
+                                      (float(max_potential_corners - min_potential_corners) /
+                                      float(max_potential_corners + min_potential_corners)))
+
+        # corners_score = captured_corners_score + potential_corners_score
+
+        # if self.turn <= 25:
+        #     return coin_parity_score + (5 * mobility_score) + captured_corners_score + potential_corners_score
+
+        return coin_parity_score + mobility_score + 4 * (captured_corners_score + potential_corners_score)
 
 
     def minimax(self, board, should_maximize, depth_level, max_depth, alpha, beta):
@@ -178,19 +223,17 @@ class GameMaster:
             color = self.opponent_color
             target_color = self.color
 
-        # TODO: apply alpha-beta pruning
-
         found_move = False
         possible_moves = []
 
         for i in range(1, 9):
             for j in range(1, 9):
-                if board[i][j] == EMPTY_CELL:
+                if board[i][j] == ".":
 
                     flanked_coins = []
                     found_flank = False
 
-                    for direction in DIRECTIONS:
+                    for direction in self.DIRECTIONS:
                         _i = i
                         _j = j
                         di = direction[0]
@@ -234,7 +277,8 @@ class GameMaster:
                         continue
 
                     # cloning board
-                    updated_board = deepcopy(board)
+                    # updated_board = self.deepcopy(board)
+                    updated_board = self.copy.deepcopy(board)
 
                     # effectively making the move
                     updated_board[i][j] = color
@@ -268,11 +312,6 @@ class GameMaster:
             score = self.evaluate_board_configuration(board)
             return (None, score)
 
-        global total_branches
-        global visited_nodes
-        total_branches += len(possible_moves)
-        visited_nodes += 1
-
         # finding best move based on current node's strategy (to maximize or to minimize)
         coord, best_score = None, float("-inf") if should_maximize else float("inf")
         for c, score in possible_moves:
@@ -296,7 +335,7 @@ class GameMaster:
         # measuring time we're taking to make the play
         #   by the tournament rules,
         #   we have at most 3 seconds to make a move.
-        start = time.time()
+        start = self.time.time()
 
         if not self.first_turn:
             # incrementing turn-count by two,
@@ -308,20 +347,50 @@ class GameMaster:
             if self.turn == 1:
                 # returning default first move
                 #   if we're the first player to play
-                return Move(4, 3)
+                return self.Move(4, 3)
 
         # unwrapping board configuration object
         board = board_wrapper.board
 
+        corner_checks = self.time.time()
+        # we always capture a corner if we can
+        if self.turn > 20:
+            for corner_coords in self.CORNERS:
+                corner_color = board[corner_coords[0]][corner_coords[1]]
+                if corner_color == ".":
+                    for direction in self.DIRECTIONS:
+                        _i, _j = corner_coords[0], corner_coords[1]
+                        di, dj = direction[0], direction[1]
+
+                        _i += di
+                        _j += dj
+                        current_pos = board[_i][_j]
+
+                        if current_pos != self.opponent_color:
+                            continue
+
+                        found_flank = False
+                        while True:
+                            _i += di
+                            _j += dj
+                            current_pos = board[_i][_j]
+
+                            if current_pos == "?" or current_pos == ".":
+                                # no flank found along this path
+                                break
+
+                            if current_pos == self.color:
+                                # found flank, we can capture this corner!
+                                return self.Move(corner_coords[0], corner_coords[1])
+        corner_checks = self.time.time() - corner_checks
+
         depthness = 4
         while True:
             # executing minimax with alpha-beta pruning using an iterative DFS
-            elapsed_in_iteration = time.time()
+            elapsed_in_iteration = self.time.time()
             move, score = self.minimax(board, True, 0, depthness, float("-inf"), float("inf"))
-            elapsed_in_iteration = time.time() - elapsed_in_iteration
-            elapsed = time.time() - start
-
-            print "Depthness {} took {} to run".format(str(depthness), str(elapsed_in_iteration))
+            elapsed_in_iteration = self.time.time() - elapsed_in_iteration
+            elapsed = self.time.time() - start
 
             if elapsed + (elapsed_in_iteration * 8) >= 2.5:
                 break
@@ -329,9 +398,11 @@ class GameMaster:
             depthness += 1
 
         print "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-        print "~~~~ Reached depthness {} & took {} to play ~~~~".format(str(depthness), str(time.time() - start))
-        print "~~~~ Branching factor this iteration was {} ~~~~".format(str(total_branches / visited_nodes))
+        print "Turn {}".format(str(self.turn))
+        print "Reached depthness {}".format(str(depthness))
+        print "Took {} to play".format(str(self.time.time() - start))
+        print "Took {} to check corners".format(str(corner_checks))
         print "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
 
 
-        return Move(move[0], move[1])
+        return self.Move(move[0], move[1])

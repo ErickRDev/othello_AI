@@ -8,14 +8,14 @@ class GameMaster:
 
     from models.move import Move
 
-    def __init__(self, color, allowed_round_time=3000):
+    def __init__(self, color):
         """
             Constructor.
         """
+        self.DEBUG_FLAG = False
+
         self.color = color
         self.opponent_color = "o" if self.color == "@" else "@"
-
-        self.allowed_round_time = allowed_round_time
 
         self.turn = 1 if self.color == "@" else 2
         self.first_turn = True
@@ -158,8 +158,6 @@ class GameMaster:
                         min_potential_corners_considered.add(corner_coords)
                         min_potential_corners += 1
 
-            # TODO: evaluate unlikely corner captures
-
         captured_corners_score = 0
         # calculating captured corner scores
         if max_corners_captured + min_corners_captured != 0:
@@ -173,11 +171,6 @@ class GameMaster:
             potential_corners_score = (100 *
                                       (float(max_potential_corners - min_potential_corners) /
                                       float(max_potential_corners + min_potential_corners)))
-
-        # corners_score = captured_corners_score + potential_corners_score
-
-        # if self.turn <= 25:
-        #     return coin_parity_score + (5 * mobility_score) + captured_corners_score + potential_corners_score
 
         return coin_parity_score + mobility_score + 4 * (captured_corners_score + potential_corners_score)
 
@@ -397,12 +390,12 @@ class GameMaster:
 
             depthness += 1
 
-        print "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-        print "Turn {}".format(str(self.turn))
-        print "Reached depthness {}".format(str(depthness))
-        print "Took {} to play".format(str(self.time.time() - start))
-        print "Took {} to check corners".format(str(corner_checks))
-        print "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-
+        if self.DEBUG_FLAG:
+            print "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+            print "Turn {}".format(str(self.turn))
+            print "Reached depthness {}".format(str(depthness))
+            print "Took {} to play".format(str(self.time.time() - start))
+            print "Took {} to check corners".format(str(corner_checks))
+            print "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
 
         return self.Move(move[0], move[1])

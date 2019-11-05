@@ -45,6 +45,7 @@ class GameMaster:
             (0, -1)   # west
         ]
 
+
     def evaluate_board_configuration(self, board):
         """
             Evaluates the current board configuration based on the linear combination
@@ -74,13 +75,28 @@ class GameMaster:
         max_potential_moves_considered = set()
         min_potential_moves_considered = set()
 
+        # counters for stability heuristic
+        max_stable_coins, min_stable_coins = 0, 0
+        max_semi_stable_coins, min_semi_stable_coins = 0, 0
+
         # iterating over the board and evaluating current configuration of coins:
         for i in range(1, 9):
+            min_coins_in_row = 0
+            max_coins_in_row = 0
+
             for j in range(1, 9):
                 coin = board[i][j]
                 if coin == self.color:
                     # coin parity
+                    max_coins_in_row += 1
                     max_coins += 1
+
+                    if (i, j) in self.CORNERS:
+                        max_stable_coins += 1
+
+                    if i == 1 or i == 8 or j == 1 or j == 8:
+                        # this is an edge, so this coin is semi-stable
+                        max_semi_stable_coins += 1
 
                     # potential mobility
                     for direction in self.DIRECTIONS:
@@ -91,7 +107,15 @@ class GameMaster:
 
                 elif coin == self.opponent_color:
                     # coin parity
+                    min_coins_in_row += 1
                     min_coins += 1
+
+                    if (i, j) in self.CORNERS:
+                        min_stable_coins += 1
+
+                    if i == 1 or i == 8 or j == 1 or j == 8:
+                        # this is an edge, so this coin is semi-stable
+                        min_semi_stable_coins += 1
 
                     # potential mobility
                     for direction in self.DIRECTIONS:
@@ -111,6 +135,16 @@ class GameMaster:
             mobility_score = (100 * 
                              (float(max_potential_moves - min_potential_moves) / 
                              float(max_potential_moves + min_potential_moves)))
+
+        max_stability_counter = max_stable_coins + max_semi_stable_coins
+        min_stability_counter = min_stable_coins + min_semi_stable_coins
+
+        stability_score = 0
+        # calculating stability score
+        if max_stability_counter + min_stability_counter != 0:
+            stability_score = (100 *
+                              (float(max_stability_counter - min_stability_counter) /
+                              float(max_stability_counter + min_stability_counter)))
 
         # counters for corners heuristic
         max_corners_captured = 0
@@ -172,7 +206,7 @@ class GameMaster:
                                       (float(max_potential_corners - min_potential_corners) /
                                       float(max_potential_corners + min_potential_corners)))
 
-        return coin_parity_score + mobility_score + 4 * (captured_corners_score + potential_corners_score)
+        return coin_parity_score + mobility_score + 4 * (captured_corners_score + potential_corners_score) + stability_score
 
 
     def minimax(self, board, should_maximize, depth_level, max_depth, alpha, beta):

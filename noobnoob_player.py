@@ -1,4 +1,4 @@
-class GameMaster:
+class NoobNoob:
     """ 
         Simulates an inteligent player
     """
@@ -50,12 +50,14 @@ class GameMaster:
         """
             Evaluates the current board configuration based on the linear combination
                 of the heuristics described below. The intuition for the heuristics was 
-                taken from this article:
-                https://courses.cs.washington.edu/courses/cse573/04au/Project/mini1/RUSSIA/Final_Paper.pdf
+                taken from the articles below:
+                # https://courses.cs.washington.edu/courses/cse573/04au/Project/mini1/RUSSIA/Final_Paper.pdf
+                # https://pdfs.semanticscholar.org/235f/b5f2ebae93e33e2bf7038bb37a690fa9390e.pdf
+
 
             The heuristics under employment are:
 
-            * Coin Parity
+            * Disc Parity
             * Corners
             * Stability
             * Mobility
@@ -66,87 +68,85 @@ class GameMaster:
             @returns:
                 A score.
         """
-        # counters for coin parity heuristic
-        max_coins, min_coins = 0, 0
+        # counters for disc parity heuristic
+        max_discs, min_discs = 0, 0
 
         # counters for potential mobility heuristic
-        max_potential_moves = 0
-        min_potential_moves = 0
-        max_potential_moves_considered = set()
-        min_potential_moves_considered = set()
+        max_frontier_discs = set()
+        min_frontier_discs = set()
+        max_potential_moves = set()
+        min_potential_moves = set()
 
-        # counters for stability heuristic
-        max_stable_coins, min_stable_coins = 0, 0
-        max_semi_stable_coins, min_semi_stable_coins = 0, 0
+        # counters for edge heuristic
+        max_edge_discs, min_edge_discs = 0, 0
 
-        # iterating over the board and evaluating current configuration of coins:
+        # iterating over the board and evaluating current configuration of discs:
         for i in range(1, 9):
-            min_coins_in_row = 0
-            max_coins_in_row = 0
+            min_discs_in_row = 0
+            max_discs_in_row = 0
 
             for j in range(1, 9):
-                coin = board[i][j]
-                if coin == self.color:
-                    # coin parity
-                    max_coins_in_row += 1
-                    max_coins += 1
-
-                    if (i, j) in self.CORNERS:
-                        max_stable_coins += 1
+                disc = board[i][j]
+                if disc == self.color:
+                    # disc parity
+                    max_discs_in_row += 1
+                    max_discs += 1
 
                     if i == 1 or i == 8 or j == 1 or j == 8:
-                        # this is an edge, so this coin is semi-stable
-                        max_semi_stable_coins += 1
+                        # this is an edge, so this disc is semi-stable
+                        max_edge_discs += 1
 
                     # potential mobility
                     for direction in self.DIRECTIONS:
                         _i, _j = i + direction[0], j + direction[1]
-                        if board[_i][_j] == "." and (_i, _j) not in max_potential_moves_considered:
-                            max_potential_moves_considered.add((_i, _j))
-                            max_potential_moves += 1
+                        if board[_i][_j] == ".":
+                            # adding to potential moves set
+                            if (_i, _j) not in min_potential_moves:
+                                min_potential_moves.add((_i, _j))
+                            # adding to frontier discs set
+                            if (i, j) not in min_frontier_discs:
+                                min_frontier_discs.add((i, j))
 
-                elif coin == self.opponent_color:
-                    # coin parity
-                    min_coins_in_row += 1
-                    min_coins += 1
-
-                    if (i, j) in self.CORNERS:
-                        min_stable_coins += 1
+                elif disc == self.opponent_color:
+                    # disc parity
+                    min_discs_in_row += 1
+                    min_discs += 1
 
                     if i == 1 or i == 8 or j == 1 or j == 8:
-                        # this is an edge, so this coin is semi-stable
-                        min_semi_stable_coins += 1
+                        # this is an edge, so this disc is semi-stable
+                        min_edge_discs += 1
 
                     # potential mobility
                     for direction in self.DIRECTIONS:
                         _i, _j = i + direction[0], j + direction[1]
-                        if board[_i][_j] == "." and (_i, _j) not in min_potential_moves_considered:
-                            min_potential_moves_considered.add((_i, _j))
-                            min_potential_moves += 1
+                        if board[_i][_j] == "." and (_i, _j):
+                            # adding to potential moves set
+                            if (_j, _j) not in max_potential_moves:
+                                max_potential_moves.add((_i, _j))
+                            # adding to frontier discs set
+                            if (i, j) not in max_frontier_discs:
+                                max_frontier_discs.add((i, j))
 
-        # calculating coin parity score
-        coin_parity_score = (100 * 
-                            (float(max_coins - min_coins) / 
-                            float(max_coins + min_coins)))
+        # calculating disc parity score
+        disc_parity_score = (100 * (float(max_discs - min_discs) / float(max_discs + min_discs)))
 
         mobility_score = 0
+        max_potential_mobility = len(max_potential_moves) + len(max_frontier_discs)
+        min_potential_mobility = len(min_potential_moves) + len(min_frontier_discs)
         # calculating potential mobility score
-        if max_potential_moves + min_potential_moves != 0:
+        if max_potential_mobility + min_potential_mobility != 0:
             mobility_score = (100 * 
-                             (float(max_potential_moves - min_potential_moves) / 
-                             float(max_potential_moves + min_potential_moves)))
+                             (float(max_potential_mobility - min_potential_mobility) / 
+                             float(max_potential_mobility + min_potential_mobility)))
 
-        max_stability_counter = max_stable_coins + max_semi_stable_coins
-        min_stability_counter = min_stable_coins + min_semi_stable_coins
+        edge_score = 0
+        # calculating edge score
+        if max_edge_discs + min_edge_discs != 0:
+            edge_score = (100 *
+                         (float(max_edge_discs - min_edge_discs) /
+                         float(max_edge_discs + min_edge_discs)))
 
-        stability_score = 0
-        # calculating stability score
-        if max_stability_counter + min_stability_counter != 0:
-            stability_score = (100 *
-                              (float(max_stability_counter - min_stability_counter) /
-                              float(max_stability_counter + min_stability_counter)))
-
-        # counters for corners heuristic
+        # counters for corners heuristics
         max_corners_captured = 0
         min_corners_captured = 0
         max_potential_corners = 0
@@ -206,7 +206,7 @@ class GameMaster:
                                       (float(max_potential_corners - min_potential_corners) /
                                       float(max_potential_corners + min_potential_corners)))
 
-        return coin_parity_score + mobility_score + 4 * (captured_corners_score + potential_corners_score) + stability_score
+        return disc_parity_score + mobility_score + 10 * (captured_corners_score + potential_corners_score) + edge_score
 
 
     def minimax(self, board, should_maximize, depth_level, max_depth, alpha, beta):
@@ -257,7 +257,7 @@ class GameMaster:
             for j in range(1, 9):
                 if board[i][j] == ".":
 
-                    flanked_coins = []
+                    flanked_discs = []
                     found_flank = False
 
                     for direction in self.DIRECTIONS:
@@ -283,11 +283,11 @@ class GameMaster:
                                 break
 
                             elif current_pos == color and len(buf) == 0:
-                                # neighbouring already controlled coin: no flank to be found here
+                                # neighbouring already controlled disc: no flank to be found here
                                 break
 
                             elif current_pos == target_color:
-                                # storing coordinates of current coin
+                                # storing coordinates of current disc
                                 #   as it will be flipped if we find a valid
                                 #   flank along this path
                                 buf.append((_i, _j))
@@ -296,7 +296,7 @@ class GameMaster:
                             else:
                                 # flank detected: this is a valid move;
                                 found_flank, found_move = True, True
-                                flanked_coins.extend(buf)
+                                flanked_discs.extend(buf)
                                 break
 
                     if not found_flank:
@@ -310,9 +310,9 @@ class GameMaster:
                     # effectively making the move
                     updated_board[i][j] = color
 
-                    # flipping flanked coins
-                    for coin in flanked_coins:
-                        updated_board[coin[0]][coin[1]] = color
+                    # flipping flanked discs
+                    for disc in flanked_discs:
+                        updated_board[disc[0]][disc[1]] = color
 
                     _, score = self.minimax(
                                             updated_board, 
